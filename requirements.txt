@@ -1,0 +1,11 @@
+# Multi-Agent Warehouse RL Dependencies
+torch>=2.0.0
+gymnasium>=1.0.0
+pettingzoo>=1.24.0
+numpy>=1.26.0
+pandas>=2.0.0
+matplotlib>=3.8.0
+pygame>=2.5.0
+pyyaml>=6.0
+tensorboard>=2.15.0
+pytest>=8.0.0

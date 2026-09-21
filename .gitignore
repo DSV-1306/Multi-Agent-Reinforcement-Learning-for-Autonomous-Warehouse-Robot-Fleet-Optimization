@@ -1,0 +1,33 @@
+# Python Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Pytest & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Tensorboard Run Logs (large binary event files)
+results/logs/
+
+# Checkpoint model files (optional: keep if desired, or ignore if >100MB)
+# Note: our .pt files are < 500KB so they are safe to commit, but uncomment if not needed:
+# *.pt
+
+# IDE / Editor config
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

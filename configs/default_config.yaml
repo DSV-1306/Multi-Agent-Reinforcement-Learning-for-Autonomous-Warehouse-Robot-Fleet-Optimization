@@ -1,0 +1,38 @@
+# Default Configuration for Warehouse Multi-Agent Reinforcement Learning
+
+environment:
+  num_robots: 5
+  grid_width: 10
+  grid_height: 10
+  layout_type: "kiva_standard"
+  order_lambda: 0.2
+  max_steps: 400
+
+hyperparameters:
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_eps: 0.2
+  value_coef: 0.5
+  entropy_coef: 0.01
+  max_grad_norm: 0.5
+
+ippo:
+  lr: 0.0003
+  buffer_size: 256
+  num_epochs: 4
+  batch_size: 64
+  total_timesteps: 50000
+
+mappo:
+  lr_actor: 0.0003
+  lr_critic: 0.0005
+  buffer_size: 256
+  num_epochs: 4
+  batch_size: 64
+  total_timesteps: 50000
+
+evaluation:
+  num_eval_episodes: 20
+  eval_interval: 10000
+  seeds: [101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
+          111, 112, 113, 114, 115, 116, 117, 118, 119, 120]
