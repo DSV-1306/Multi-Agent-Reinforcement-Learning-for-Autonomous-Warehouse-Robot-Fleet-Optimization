@@ -9,3 +9,5 @@ pygame>=2.5.0
 pyyaml>=6.0
 tensorboard>=2.15.0
 pytest>=8.0.0
+openpyxl>=3.1.0    # Phase 3: read Online Retail II .xlsx once (data/preprocess_online_retail.py)
+scipy>=1.11.0      # Phase 5: Student-t confidence intervals (evaluation/stats.py)

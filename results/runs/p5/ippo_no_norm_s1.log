@@ -1,0 +1,13 @@
+--> [IPPO] seed=1 envs=16 rollout=64 updates=489 budget=500,736 env steps, 1 stage(s) -> results/runs/p5\ippo_no_norm_s1
+  step         0 st0 | dev thru   1.6 coll  72.5 (wall 0.0) | train thru   nan | 0 env-steps/s
+  step    50,176 st0 | dev thru   3.5 coll   8.3 (wall 0.0) | train thru   3.8 | 677 env-steps/s
+  step   100,352 st0 | dev thru   5.4 coll   8.0 (wall 0.0) | train thru   3.3 | 712 env-steps/s
+  step   150,528 st0 | dev thru   2.6 coll   6.2 (wall 0.0) | train thru   6.0 | 729 env-steps/s
+  step   200,704 st0 | dev thru   3.4 coll   4.5 (wall 0.0) | train thru   2.3 | 731 env-steps/s
+  step   250,880 st0 | dev thru   2.2 coll   5.3 (wall 0.0) | train thru   4.0 | 739 env-steps/s
+  step   300,032 st0 | dev thru   3.6 coll   5.0 (wall 0.0) | train thru   3.4 | 732 env-steps/s
+  step   350,208 st0 | dev thru   3.3 coll   9.4 (wall 0.0) | train thru   4.1 | 729 env-steps/s
+  step   400,384 st0 | dev thru   3.2 coll   4.3 (wall 0.0) | train thru   3.9 | 731 env-steps/s
+  step   450,560 st0 | dev thru   3.8 coll   7.8 (wall 0.0) | train thru   4.5 | 734 env-steps/s
+  step   500,736 st0 | dev thru   4.4 coll   6.7 (wall 0.0) | train thru   4.0 | 740 env-steps/s
+--> [IPPO] done in 11.3 min | final dev thru 4.4 | best dev thru 5.4

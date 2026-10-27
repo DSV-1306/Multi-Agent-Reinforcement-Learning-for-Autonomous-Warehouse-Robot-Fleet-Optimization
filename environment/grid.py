@@ -21,16 +21,26 @@ class WarehouseGrid:
         width: int = 10,
         height: int = 10,
         layout_type: str = "kiva_standard",
+        spec: Optional[dict] = None,
     ):
-        self.width = width
-        self.height = height
-        self.layout_type = layout_type
+        """
+        spec: optional explicit layout {"width", "height", "shelves", "stations", "walls"} (lists of [x, y]),
+        e.g. a held-out layout derived from a MAPF benchmark map (data/mapf_layouts.py). Overrides layout_type.
+        """
+        self.width = spec["width"] if spec else width
+        self.height = spec["height"] if spec else height
+        self.layout_type = spec.get("name", "custom") if spec else layout_type
 
         self.shelves: Set[Tuple[int, int]] = set()
         self.stations: List[Tuple[int, int]] = []
         self.walls: Set[Tuple[int, int]] = set()
 
-        self._build_layout(layout_type)
+        if spec:
+            self.shelves = {tuple(c) for c in spec["shelves"]}
+            self.stations = [tuple(c) for c in spec["stations"]]
+            self.walls = {tuple(c) for c in spec["walls"]}
+        else:
+            self._build_layout(layout_type)
 
     def _build_layout(self, layout_type: str) -> None:
         """Constructs layout features based on selected layout preset."""
@@ -115,6 +125,36 @@ class WarehouseGrid:
             if self.is_walkable(nx, ny):
                 access_cells.append((nx, ny))
         return access_cells
+
+    def bfs_distances(self, source: Tuple[int, int]) -> dict:
+        """Shortest walkable path length from source to every reachable walkable cell."""
+        dist = {source: 0}
+        frontier = [source]
+        while frontier:
+            nxt = []
+            for x, y in frontier:
+                for dx, dy in ((0, -1), (0, 1), (1, 0), (-1, 0)):
+                    c = (x + dx, y + dy)
+                    if c not in dist and self.is_walkable(*c):
+                        dist[c] = dist[(x, y)] + 1
+                        nxt.append(c)
+            frontier = nxt
+        return dist
+
+    def mean_trip_length(self) -> float:
+        """
+        Mean shortest-path length between a shelf access cell and a station, averaged uniformly over
+        (shelf, access cell, station). A geometry-only measure of how long one delivery takes, used to
+        scale order rates on held-out layouts without looking at any results.
+        """
+        per_station = [self.bfs_distances(s) for s in self.stations]
+        trips = []
+        for shelf in sorted(self.shelves):
+            for cell in self.get_shelf_access_cells(shelf):
+                trips.extend(d[cell] for d in per_station if cell in d)
+        if not trips:
+            raise ValueError("no shelf access cell can reach a station")
+        return float(np.mean(trips))
 
     def manhattan_distance(self, p1: Tuple[int, int], p2: Tuple[int, int]) -> int:
         return abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])

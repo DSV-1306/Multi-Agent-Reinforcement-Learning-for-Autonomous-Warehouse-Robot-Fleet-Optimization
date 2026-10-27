@@ -1,0 +1,7 @@
+--> kiva_standard/low                          lambda=0.100 | hier=34.6
+--> kiva_standard/medium                       lambda=0.200 | hier=61.6
+--> kiva_standard/high                         lambda=0.300 | hier=67.3
+--> narrow_corridor/low                        lambda=0.100 | hier=23.2
+--> narrow_corridor/medium                     lambda=0.200 | hier=26.1
+--> narrow_corridor/high                       lambda=0.300 | hier=24.9
+--> Saved 180 episode rows to results/eval/p5_own_dev_hier.csv

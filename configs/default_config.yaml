@@ -1,4 +1,5 @@
 # Default Configuration for Warehouse Multi-Agent Reinforcement Learning
+# Phase 1 changes are marked "P1". Pre-Phase-1 values are kept in comments where they changed.
 
 environment:
   num_robots: 5
@@ -7,32 +8,179 @@ environment:
   layout_type: "kiva_standard"
   order_lambda: 0.2
   max_steps: 400
+  state_max_robots: 10             # P2: MAPPO state padded to 10 robots (curriculum 2->5, tests up to 10)
+  layouts_dir: "data/layouts"      # P3: held-out MAPF-derived layouts ("mapf:<name>")
+  orders:                          # P3: order process
+    mode: "synthetic"              # synthetic (default, training) | empirical (Online Retail II stats)
+    empirical_stats_file: "data/processed/online_retail_stats.json"
+    steps_per_hour: 40             # assumption: 1 h of the shop day = 40 steps, so 400 steps = 10 h
+    start_hour: 8                  # assumption: episode covers 08:00-18:00
+    shelf_assignment_seed: 0       # SKU-rank -> shelf permutation (no slotting optimisation assumed)
+  mask_useless_interact: true      # P1: Interact allowed in the mask only when it can pick up
+  rewards:                         # P1: moved from warehouse_env.py; values unchanged
+    time: -0.02
+    collision_wall: -5.0
+    collision_robot: -10.0
+    progress: 0.2
+    idle: -0.05
+    pickup: 3.0
+    delivery: 10.0
+    penalize_noop_interact: true   # P1: closes the "free wait" loophole (Phase 0 F1); false = original
 
 hyperparameters:
   gamma: 0.99
   gae_lambda: 0.95
   clip_eps: 0.2
+  value_clip: null                 # P1: separate from clip_eps; null = no value clipping (was 0.2)
   value_coef: 0.5
   entropy_coef: 0.01
   max_grad_norm: 0.5
 
+training:                          # P1: new section, shared by IPPO and MAPPO
+  num_envs: 16                     # parallel envs in one process (batched inference); fastest of 4/8/16 measured
+  torch_threads: 1                 # fastest on the i3 in Phase 0 (2.4 s vs 8.9 s per update at 4 threads)
+  action_masking: true
+  normalize_obs: true
+  normalize_reward: true
+  bootstrap_on_truncation: true
+  anneal_lr: true
+  obs_clip: 5.0
+  reward_clip: 10.0
+  norm_epsilon: 1.0e-8
+  env_seed_stride: 10000           # env k of run seed s starts from seed s*stride + k (keeps train env seeds >= 10000, away from dev/test)
+  eval_interval: 50000             # env steps between dev evaluations
+  runs_dir: "results/runs"
+  layouts: ["kiva_standard", "narrow_corridor"]   # P2: training envs alternate over these (own layouts only)
+  dev_scenarios:                   # P2: learning curves + best-checkpoint selection (dev seeds)
+    - {layout_type: "kiva_standard", order_lambda: 0.2, num_robots: 5}
+    - {layout_type: "narrow_corridor", order_lambda: 0.2, num_robots: 5}
+
+curriculum:                        # P2: budget fractions; the last stage is the target task distribution
+  enabled: false                   # true = 2->3->5 robot ramp. Dev diagnostic (results/runs/diag, IPPO seed 1,
+                                   # 250k): with the ramp, kiva dev throughput fell 47.5 -> 11.2 after the switch
+                                   # to 5 robots (entropy 0.82 -> 0.19); without it 52.2. So the main config is
+                                   # off and "curriculum on" is the Phase 5 ablation.
+  stages:
+    - {fraction: 0.1, num_robots: 2, order_lambda_range: [0.05, 0.10]}
+    - {fraction: 0.1, num_robots: 3, order_lambda_range: [0.10, 0.20]}
+    - {fraction: 0.8, num_robots: 5, order_lambda_range: [0.10, 0.30]}
+
+scenarios:                         # P2: own-layout scenario matrix (dev seeds); loads per 5 robots
+  loads: {low: 0.1, medium: 0.2, high: 0.3}
+  layouts: ["kiva_standard", "narrow_corridor"]
+  num_robots: 5
+
+test_scenarios:                    # P3/P5: held-out TEST = MAPF-derived layouts + empirical orders
+  reference_layout: "kiva_standard"  # trip-length reference for the order-rate rule (scenario_matrix.py)
+  layouts: ["mapf:warehouse-10-20-10-2-1", "mapf:warehouse-10-20-10-2-2",
+            "mapf:warehouse-20-40-10-2-1", "mapf:warehouse-20-40-10-2-2"]
+  num_robots: [5, 10]
+  load_per_5_robots: 0.2           # = the "medium" own-layout load, scaled by the geometry rule
+  load_name: "medium"
+  order_mode: "empirical"
+
 ippo:
   lr: 0.0003
-  buffer_size: 256
+  buffer_size: 64                  # steps per env per update (P1: 64 x 16 envs = 1024 env steps; was 256 x 1)
   num_epochs: 4
-  batch_size: 64
-  total_timesteps: 50000
+  batch_size: 1280                 # samples per minibatch: 1024 steps x 5 robots / 4 minibatches (was 64)
+  total_timesteps: 1000000         # env steps = 2500 episodes, ~50 min at ~350 steps/s (P1; was 50000, CLI used 15000)
 
 mappo:
   lr_actor: 0.0003
   lr_critic: 0.0005
-  buffer_size: 256
+  buffer_size: 64
   num_epochs: 4
-  batch_size: 64
-  total_timesteps: 50000
+  batch_size: 1280
+  total_timesteps: 1000000
+  critic_input: "agent_specific"   # P1: V(s, o_i) per robot; "global" = original single fleet value
+
+seeds:                             # P1: disjoint seed sets
+  train: [1, 2, 3, 4, 5]           # training-run seeds (env seeds derived via env_seed_stride)
+  dev_eval: [5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010]   # tuning / learning curves
 
 evaluation:
   num_eval_episodes: 20
   eval_interval: 10000
+  # Held-out test seeds (split "test"). Phase 5 adds MAPF layouts + empirical orders as the real test set.
   seeds: [101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
           111, 112, 113, 114, 115, 116, 117, 118, 119, 120]
+  torch_seed: 0                    # P1: seeds stochastic policy sampling during evaluation
+  deterministic: false             # sample actions (argmax can deadlock identical robots); see report
+  output_dir: "results/eval"
+
+# Phase 0 audit (evaluation/phase0_audit.py). Read-only diagnostics; changes nothing else.
+audit:
+  output_dir: "results/phase0"
+  # Settings that evaluation/evaluate.py currently hardcodes, used to reproduce the
+  # committed results/evaluation_results.csv (10 episodes, seeds 100..109, lambda 0.25, 300 steps).
+  repro_num_episodes: 10
+  repro_order_lambda: 0.25
+  repro_max_steps: 300
+  repro_torch_seed: 0           # seeds the stochastic policy sampling during the repro run
+  ippo_checkpoint: "results/models/ippo_best.pt"
+  mappo_checkpoint: "results/models/mappo_best.pt"
+  # Diagnostics episodes use their own seed range, disjoint from eval (100..120) and train (42).
+  diag_seed_start: 9000
+  diag_num_episodes: 10
+  # Speed profiling
+  profile_env_steps: 4000       # env steps timed per measurement
+  profile_ppo_updates: 3        # PPO updates timed per method
+  profile_seed: 9500
+  profile_layouts: ["kiva_standard", "narrow_corridor"]
+  # Planned training budgets (env steps) to convert measured speed into wall-clock estimates
+  budget_env_steps: [50000, 500000, 1000000, 2000000]
+
+# Phase 3: real-data realism. Raw files live OUTSIDE the repo (never committed); only small
+# derived JSON/CSV files are written to processed_dir / layouts_dir. See data/README.md.
+data:
+  raw_dir: "C:/Users/rajen/Downloads/MARL_datasets"
+  online_retail_file: "online_retail_ii/online_retail_II.xlsx"
+  mapf_dir: "mapf_maps"
+  processed_dir: "data/processed"
+  online_retail:
+    top_n_skus: 1000               # SKU popularity list length (>= shelves of the largest layout)
+    max_lines_per_invoice: 50      # longer invoices are folded into this bucket
+    drop_non_product_codes: true   # StockCodes not starting with a digit (POST, M, DOT, BANK CHARGES, ...)
+    drop_nonpositive_price: true
+  mapf:                            # held-out TEST layouts; same rule for every map
+    obstacle_chars: "@T"
+    open_margin: 6                 # free columns kept left of the first shelf column (open area is cropped)
+    num_stations: 3                # evenly spaced on the left edge of the crop
+    maps:
+      - {file: "warehouse-10-20-10-2-1.map", crop_width: 30, crop_height: 20}
+      - {file: "warehouse-10-20-10-2-2.map", crop_width: 30, crop_height: 20}
+      - {file: "warehouse-20-40-10-2-1.map", crop_width: 46, crop_height: 33}
+      - {file: "warehouse-20-40-10-2-2.map", crop_width: 46, crop_height: 33}
+
+hier:                              # P4: RL task allocation + Space-Time A* routing (agents/hier_agent.py)
+  lr: 0.001                        # dev: 3e-4 with 2048-decision rollouts gave ~370 Adam steps per run and the
+                                   # policy never moved (approx_kl ~ 1e-6); see results/runs/diag/hot2 vs hfix
+  hidden_dim: 64
+  candidates_nearest: 4            # candidate orders per decision: 4 nearest to the robot ...
+  candidates_oldest: 4             # ... + 4 oldest pending (de-duplicated, K = 8 slots)
+  allow_defer: true                # the policy may leave a robot idle until the next decision point
+  queue_norm: 20.0                 # scale for queue-length context features
+  reward_mode: "order_time"        # "order_time" (bandit) | "fleet" (semi-MDP). Dev, 100k steps, seed 9:
+                                   # order_time latency 98 -> 71 steps, fleet 100 -> 95 (results/runs/diag/hot2, hfl2)
+  reward: {delivery: 1.0, queue_cost: 0.01}   # fleet mode: r_t = deliveries - 0.01 * orders in system
+  entropy_coef: 0.01
+  rollout_decisions: 256           # PPO update every >= 256 allocation decisions (decisions are rare: ~1 per 6 steps)
+  num_epochs: 4
+  batch_size: 64
+  total_timesteps: 300000          # env steps (= 750 episodes, ~60k decisions); A* routing caps speed ~150 steps/s
+
+experiments:                       # P5: training jobs run by training/run_queue.py
+  runs_dir: "results/runs/p5"
+  workers: 3                       # parallel processes (1 torch thread each) on the 2-core / 4-thread i3
+  seeds: [1, 2, 3]                 # training seeds (subset of seeds.train)
+  rl_timesteps: 500000             # IPPO/MAPPO: Phase 1 dev curves plateau by ~400-500k env steps
+  hier_timesteps: 300000
+  variants:                        # name -> method + config overrides (ablations change ONE thing)
+    ippo: {method: ippo, overrides: []}
+    mappo: {method: mappo, overrides: []}
+    hier: {method: hier, overrides: []}
+    ippo_no_mask: {method: ippo, overrides: ["training.action_masking=false"]}
+    ippo_no_norm: {method: ippo, overrides: ["training.normalize_obs=false", "training.normalize_reward=false"]}
+    ippo_cur: {method: ippo, overrides: ["curriculum.enabled=true"]}           # short names: Windows MAX_PATH
+    mappo_glob: {method: mappo, overrides: ["mappo.critic_input=global"]}

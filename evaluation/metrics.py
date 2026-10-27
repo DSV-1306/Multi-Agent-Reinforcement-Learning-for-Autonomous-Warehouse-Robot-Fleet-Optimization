@@ -72,3 +72,18 @@ class MetricsTracker:
             "std_utilization": float(np.std(self.utilization_rates)) if self.utilization_rates else 0.0,
             "avg_return": float(np.mean(self.episode_returns)) if self.episode_returns else 0.0,
         }
+
+
+def summarize_episodes(episodes: List[Dict[str, float]]) -> Dict[str, float]:
+    """Mean and sample std (ddof=1) of every numeric field over a list of episode dicts (seed excluded)."""
+    out: Dict[str, float] = {"n": len(episodes)}
+    if not episodes:
+        return out
+    for key, first in episodes[0].items():
+        if key == "seed" or not isinstance(first, (int, float, np.integer, np.floating)):
+            continue
+        vals = np.asarray([ep[key] for ep in episodes], dtype=np.float64)
+        vals = vals[~np.isnan(vals)]
+        out[f"{key}_mean"] = float(vals.mean()) if vals.size else float("nan")
+        out[f"{key}_std"] = float(vals.std(ddof=1)) if vals.size > 1 else 0.0
+    return out

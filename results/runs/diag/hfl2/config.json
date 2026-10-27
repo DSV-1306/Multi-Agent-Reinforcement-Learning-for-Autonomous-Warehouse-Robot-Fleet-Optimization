@@ -1,0 +1,325 @@
+{
+  "method": "hier",
+  "variant": "hier",
+  "seed": 9,
+  "total_timesteps": 100000,
+  "cfg": {
+    "environment": {
+      "num_robots": 5,
+      "grid_width": 10,
+      "grid_height": 10,
+      "layout_type": "kiva_standard",
+      "order_lambda": 0.2,
+      "max_steps": 400,
+      "state_max_robots": 10,
+      "layouts_dir": "data/layouts",
+      "orders": {
+        "mode": "synthetic",
+        "empirical_stats_file": "data/processed/online_retail_stats.json",
+        "steps_per_hour": 40,
+        "start_hour": 8,
+        "shelf_assignment_seed": 0
+      },
+      "mask_useless_interact": true,
+      "rewards": {
+        "time": -0.02,
+        "collision_wall": -5.0,
+        "collision_robot": -5.0,
+        "progress": 0.2,
+        "idle": -0.05,
+        "pickup": 3.0,
+        "delivery": 10.0,
+        "penalize_noop_interact": true
+      }
+    },
+    "hyperparameters": {
+      "gamma": 0.99,
+      "gae_lambda": 0.95,
+      "clip_eps": 0.2,
+      "value_clip": null,
+      "value_coef": 0.5,
+      "entropy_coef": 0.01,
+      "max_grad_norm": 0.5
+    },
+    "training": {
+      "num_envs": 16,
+      "torch_threads": 1,
+      "action_masking": true,
+      "normalize_obs": true,
+      "normalize_reward": true,
+      "bootstrap_on_truncation": true,
+      "anneal_lr": true,
+      "obs_clip": 5.0,
+      "reward_clip": 10.0,
+      "norm_epsilon": 1e-08,
+      "env_seed_stride": 10000,
+      "eval_interval": 25000,
+      "runs_dir": "results/runs/diag",
+      "layouts": [
+        "kiva_standard",
+        "narrow_corridor"
+      ],
+      "dev_scenarios": [
+        {
+          "layout_type": "kiva_standard",
+          "order_lambda": 0.2,
+          "num_robots": 5
+        },
+        {
+          "layout_type": "narrow_corridor",
+          "order_lambda": 0.2,
+          "num_robots": 5
+        }
+      ]
+    },
+    "curriculum": {
+      "enabled": false,
+      "stages": [
+        {
+          "fraction": 0.1,
+          "num_robots": 2,
+          "order_lambda_range": [
+            0.05,
+            0.1
+          ]
+        },
+        {
+          "fraction": 0.1,
+          "num_robots": 3,
+          "order_lambda_range": [
+            0.1,
+            0.2
+          ]
+        },
+        {
+          "fraction": 0.8,
+          "num_robots": 5,
+          "order_lambda_range": [
+            0.1,
+            0.3
+          ]
+        }
+      ]
+    },
+    "scenarios": {
+      "loads": {
+        "low": 0.1,
+        "medium": 0.2,
+        "high": 0.3
+      },
+      "layouts": [
+        "kiva_standard",
+        "narrow_corridor"
+      ],
+      "num_robots": 5
+    },
+    "test_scenarios": {
+      "reference_layout": "kiva_standard",
+      "layouts": [
+        "mapf:warehouse-10-20-10-2-1",
+        "mapf:warehouse-10-20-10-2-2",
+        "mapf:warehouse-20-40-10-2-1",
+        "mapf:warehouse-20-40-10-2-2"
+      ],
+      "num_robots": [
+        5,
+        10
+      ],
+      "load_per_5_robots": 0.2,
+      "load_name": "medium",
+      "order_mode": "empirical"
+    },
+    "ippo": {
+      "lr": 0.0003,
+      "buffer_size": 64,
+      "num_epochs": 4,
+      "batch_size": 1280,
+      "total_timesteps": 1000000
+    },
+    "mappo": {
+      "lr_actor": 0.0003,
+      "lr_critic": 0.0005,
+      "buffer_size": 64,
+      "num_epochs": 4,
+      "batch_size": 1280,
+      "total_timesteps": 1000000,
+      "critic_input": "agent_specific"
+    },
+    "seeds": {
+      "train": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "dev_eval": [
+        5001,
+        5002,
+        5003,
+        5004,
+        5005
+      ]
+    },
+    "evaluation": {
+      "num_eval_episodes": 20,
+      "eval_interval": 10000,
+      "seeds": [
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120
+      ],
+      "torch_seed": 0,
+      "deterministic": false,
+      "output_dir": "results/eval"
+    },
+    "audit": {
+      "output_dir": "results/phase0",
+      "repro_num_episodes": 10,
+      "repro_order_lambda": 0.25,
+      "repro_max_steps": 300,
+      "repro_torch_seed": 0,
+      "ippo_checkpoint": "results/models/ippo_best.pt",
+      "mappo_checkpoint": "results/models/mappo_best.pt",
+      "diag_seed_start": 9000,
+      "diag_num_episodes": 10,
+      "profile_env_steps": 4000,
+      "profile_ppo_updates": 3,
+      "profile_seed": 9500,
+      "profile_layouts": [
+        "kiva_standard",
+        "narrow_corridor"
+      ],
+      "budget_env_steps": [
+        50000,
+        500000,
+        1000000,
+        2000000
+      ]
+    },
+    "data": {
+      "raw_dir": "C:/Users/rajen/Downloads/MARL_datasets",
+      "online_retail_file": "online_retail_ii/online_retail_II.xlsx",
+      "mapf_dir": "mapf_maps",
+      "processed_dir": "data/processed",
+      "online_retail": {
+        "top_n_skus": 1000,
+        "max_lines_per_invoice": 50,
+        "drop_non_product_codes": true,
+        "drop_nonpositive_price": true
+      },
+      "mapf": {
+        "obstacle_chars": "@T",
+        "open_margin": 6,
+        "num_stations": 3,
+        "maps": [
+          {
+            "file": "warehouse-10-20-10-2-1.map",
+            "crop_width": 30,
+            "crop_height": 20
+          },
+          {
+            "file": "warehouse-10-20-10-2-2.map",
+            "crop_width": 30,
+            "crop_height": 20
+          },
+          {
+            "file": "warehouse-20-40-10-2-1.map",
+            "crop_width": 46,
+            "crop_height": 33
+          },
+          {
+            "file": "warehouse-20-40-10-2-2.map",
+            "crop_width": 46,
+            "crop_height": 33
+          }
+        ]
+      }
+    },
+    "hier": {
+      "lr": 0.001,
+      "hidden_dim": 64,
+      "candidates_nearest": 4,
+      "candidates_oldest": 4,
+      "allow_defer": true,
+      "queue_norm": 20.0,
+      "reward_mode": "fleet",
+      "reward": {
+        "delivery": 1.0,
+        "queue_cost": 0.01
+      },
+      "entropy_coef": 0.01,
+      "rollout_decisions": 256,
+      "num_epochs": 4,
+      "batch_size": 64,
+      "total_timesteps": 300000
+    },
+    "experiments": {
+      "runs_dir": "results/runs/p5",
+      "workers": 3,
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "rl_timesteps": 500000,
+      "hier_timesteps": 300000,
+      "variants": {
+        "ippo": {
+          "method": "ippo",
+          "overrides": []
+        },
+        "mappo": {
+          "method": "mappo",
+          "overrides": []
+        },
+        "hier": {
+          "method": "hier",
+          "overrides": []
+        },
+        "ippo_no_mask": {
+          "method": "ippo",
+          "overrides": [
+            "training.action_masking=false"
+          ]
+        },
+        "ippo_no_norm": {
+          "method": "ippo",
+          "overrides": [
+            "training.normalize_obs=false",
+            "training.normalize_reward=false"
+          ]
+        },
+        "ippo_cur": {
+          "method": "ippo",
+          "overrides": [
+            "curriculum.enabled=true"
+          ]
+        },
+        "mappo_glob": {
+          "method": "mappo",
+          "overrides": [
+            "mappo.critic_input=global"
+          ]
+        }
+      }
+    }
+  }
+}

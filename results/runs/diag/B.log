@@ -1,0 +1,8 @@
+--> [IPPO] seed=1 envs=16 rollout=64 updates=245 budget=250,880 env steps, 1 stage(s) -> results/runs/diag\B_nocur_both
+  step         0 st0 | dev thru   1.6 coll  72.5 (wall 0.0) | train thru   nan | 0 env-steps/s
+  step    50,176 st0 | dev thru  14.9 coll  28.6 (wall 0.0) | train thru   8.7 | 599 env-steps/s
+  step   100,352 st0 | dev thru  10.6 coll  19.1 (wall 0.0) | train thru  10.0 | 627 env-steps/s
+  step   150,528 st0 | dev thru  15.4 coll  26.6 (wall 0.0) | train thru  14.6 | 642 env-steps/s
+  step   200,704 st0 | dev thru  23.1 coll  32.0 (wall 0.0) | train thru  22.8 | 649 env-steps/s
+  step   250,880 st0 | dev thru  24.9 coll  24.1 (wall 0.0) | train thru  24.4 | 656 env-steps/s
+--> [IPPO] done in 6.4 min | final dev thru 24.9 | best dev thru 24.9

@@ -1,0 +1,8 @@
+--> 3 job(s) to run with 1 worker(s)
+[   0.0 min] start hier_s1
+[  30.7 min] ok hier_s1 (30.7 min)
+[  30.8 min] start hier_s2
+[  59.1 min] ok hier_s2 (28.3 min)
+[  59.2 min] start hier_s3
+[ 103.4 min] ok hier_s3 (44.2 min)
+--> queue finished in 103.5 min

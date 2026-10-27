@@ -1,0 +1,11 @@
+{
+  "method": "hier",
+  "seed": 9,
+  "env_steps": 100000,
+  "decisions": 11540,
+  "wall_time_s": 533.6896498203278,
+  "env_steps_per_s": 187.37481611956696,
+  "final_dev_throughput": 43.3,
+  "best_dev_throughput": 43.8,
+  "run_dir": "results/runs/diag\\hot2"
+}

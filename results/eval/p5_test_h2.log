@@ -1,0 +1,9 @@
+--> mapf:warehouse-10-20-10-2-1/n5             lambda=0.064 | hier=7.5
+--> mapf:warehouse-10-20-10-2-1/n10            lambda=0.129 | hier=22.9
+--> mapf:warehouse-10-20-10-2-2/n5             lambda=0.067 | hier=9.1
+--> mapf:warehouse-10-20-10-2-2/n10            lambda=0.133 | hier=23.4
+--> mapf:warehouse-20-40-10-2-1/n5             lambda=0.042 | hier=4.0
+--> mapf:warehouse-20-40-10-2-1/n10            lambda=0.084 | hier=12.4
+--> mapf:warehouse-20-40-10-2-2/n5             lambda=0.042 | hier=4.4
+--> mapf:warehouse-20-40-10-2-2/n10            lambda=0.085 | hier=13.1
+--> Saved 160 episode rows to results/eval/p5_test_h2.csv

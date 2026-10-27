@@ -1,0 +1,11 @@
+{
+  "method": "hier",
+  "seed": 9,
+  "env_steps": 40000,
+  "decisions": 6192,
+  "wall_time_s": 176.06261014938354,
+  "env_steps_per_s": 227.19190614101012,
+  "final_dev_throughput": 40.1,
+  "best_dev_throughput": 40.3,
+  "run_dir": "results/runs/diag\\hfix"
+}

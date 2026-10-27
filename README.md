@@ -1,180 +1,139 @@
-# Multi-Agent Reinforcement Learning for Autonomous Warehouse Robot Fleet Optimization
+# Multi-Agent RL for Task Allocation and Collision-Free Routing of Autonomous Warehouse Robots
 
-An end-to-end simulation, training, and benchmarking testbed for autonomous mobile robot (AGV/AMR) fleet coordination, order fulfillment, and collision-free routing using Multi-Agent Reinforcement Learning (MARL).
+A grid-world warehouse simulator (PettingZoo `ParallelEnv`), a classical baseline (nearest-robot allocation +
+Space-Time A* with a reservation table) and three learning methods:
+
+| Method | What is learned | Movement |
+|---|---|---|
+| **IPPO** | per-robot movement policy (shared weights), local critic | RL |
+| **MAPPO** | same actor, centralized critic V(s, o_i) ("agent-specific global state") | RL |
+| **Hierarchical** | which pending order each idle robot takes (RL allocation) | Space-Time A* (unchanged) |
+
+The comparison is run under a fixed protocol: training on own layouts with synthetic orders, tuning on dev
+seeds, and a final **held-out test on layouts derived from public MAPF benchmark maps with order statistics
+from a real online retailer** (a distribution-shift test). All numbers in this README come from the scripts
+in this repository run on a 2-core laptop CPU; see `results/report/FINAL_REPORT.md` for the full write-up.
+
+**Results in one table** (orders delivered per episode, mean ± 95% CI over 3 training seeds; Δ = paired
+difference vs the baseline; full tables in `results/report/FINAL_REPORT.md`):
+
+| | Original repo | Dev: own layouts, 6 scenarios | Held-out test: MAPF layouts + real order stats |
+|---|---|---|---|
+| Baseline (nearest + Space-Time A*) | 46.2 | 39.3 ± 1.9 | 12.1 ± 4.4 |
+| IPPO | 4.4 | 32.6 ± 4.5 (Δ -6.8 ± 4.5) | 5.8 ± 1.3 (Δ -6.3 ± 1.3) |
+| MAPPO | 3.1 | 28.2 ± 7.0 (Δ -11.2 ± 7.0) | 4.9 ± 4.3 (Δ -7.2 ± 4.3) |
+| Hierarchical (RL allocation + A*) | - | 39.6 ± 0.3 (Δ +0.3 ± 0.3) | 12.0 ± 0.4 (Δ -0.1 ± 0.4) |
+
+The original column used a different protocol (one layout, lambda 0.25, 300 steps) and is not comparable
+row-for-row; it shows the starting point. **Honest summary:** the original RL results were broken (policies
+learned to stand still; two simulator/GAE bugs). Fixed, RL ties the planner on the open layout and a
+single-layout IPPO specialist beat it there (74.2 vs 61.3, one seed), but RL loses in the bottleneck layout and
+does not survive the held-out distribution shift. RL allocation on top of A* matches but does not beat
+greedy allocation.
 
 ---
 
-## 1. Project Overview
-
-In modern automated distribution centers (e.g., Amazon Kiva, Ocado, Alibaba), fleets of autonomous mobile robots transport customer order pods between storage shelves and packing workstations. Operating multiple robots in shared narrow corridors gives rise to traffic congestion, deadlocks, and spatial contention.
-
-This project implements and compares three decision-making paradigms:
-1. **Classical Industrial Heuristic Baseline**: Greedy Nearest-Robot Allocation + Collision-Aware Space-Time $A^*$ Pathfinding with a dynamic 4D Reservation Table.
-2. **Decentralized Single-Agent RL (IPPO)**: Independent Proximal Policy Optimization with parameter sharing across robots.
-3. **Multi-Agent Reinforcement Learning (MAPPO)**: Centralized Training with Decentralized Execution (CTDE), pairing decentralized actors with a centralized value function that evaluates global warehouse congestion.
-
----
-
-## 2. Key Architecture & RL Formulation
+## 1. Repository layout
 
 ```text
-warehouse-rl/
-├── environment/
-│   ├── grid.py                 # 2D Warehouse floor layout, shelves, stations, obstacles
-│   ├── robot.py                # AMR physical state machine & metrics tracking
-│   ├── order.py                # Poisson arrival stream with Pareto 80/20 SKU skew
-│   ├── warehouse_env.py        # PettingZoo ParallelEnv compliant environment
-│   └── gym_wrapper.py          # Gymnasium vectorized interface
-│
-├── baselines/
-│   ├── astar.py                # Space-Time A* pathfinding with 3D reservation table
-│   └── heuristic_agent.py      # Greedy task allocator + Space-Time A* navigator
-│
-├── agents/
-│   ├── models.py               # Actor, DecentralizedCritic, and CentralizedCritic networks
-│   ├── ippo_agent.py           # Independent PPO algorithm
-│   └── mappo_agent.py          # Multi-Agent PPO with CTDE
-│
-├── training/
-│   ├── buffer.py               # Multi-agent rollout buffer with GAE
-│   ├── train_ippo.py           # IPPO training pipeline with TensorBoard logging
-│   └── train_mappo.py          # MAPPO training pipeline with TensorBoard logging
-│
-├── evaluation/
-│   ├── metrics.py              # Statistical metrics tracker (latency, throughput, collisions)
-│   └── evaluate.py             # Head-to-head benchmarking runner
-│
-├── visualization/
-│   ├── renderer.py             # Real-time Pygame 2D simulation visualizer
-│   └── plotter.py              # Matplotlib publication-grade comparative dashboard
-│
-├── configs/
-│   └── default_config.yaml     # Centralized hyperparameters & environment settings
-│
-├── results/                    # Saved model weights (.pt), logs, CSVs, and plots
-├── demo.py                     # Interactive visual demo launcher
-├── requirements.txt            # Frozen package dependencies
-└── README.md
+environment/   grid.py (layouts incl. MAPF-derived), robot.py, order.py (synthetic + empirical orders),
+               warehouse_env.py (PettingZoo env: masks, collision resolution, rewards from YAML), gym_wrapper.py
+baselines/     astar.py (Space-Time A* + reservation table), heuristic_agent.py (nearest allocation + A*)
+agents/        models.py (masked actor, critics), ippo_agent.py, mappo_agent.py, hier_agent.py (RL allocator)
+training/      trainer.py (shared PPO loop), train_ippo.py, train_mappo.py, train_hier.py, buffer.py (GAE),
+               normalization.py, vec_env.py, config_utils.py (YAML + --set overrides), run_queue.py (Phase 5 jobs)
+evaluation/    evaluate.py, scenario_matrix.py, stats.py (95% CIs), plot_learning_curves.py, plot_results.py,
+               metrics.py, phase0_audit.py
+data/          README.md (download + protocol), check_datasets.py, preprocess_online_retail.py, mapf_layouts.py,
+               processed/ (small cached statistics), layouts/ (held-out layouts as JSON)
+configs/       default_config.yaml - every setting, seed set and experiment
+results/       phase0/ (audit), runs/ (training curves, summaries), eval/ (CSV + markdown tables), plots/, report/
+tests/         61+ pytest tests
 ```
 
-### Observation Space ($o_i \in \mathbb{R}^{28}$)
-Each robot receives an egocentric, normalized observation vector:
-- **Self Status (6 dims)**: Normalized coordinates $(x/W, y/H)$, status flag (`IDLE`, `EN_ROUTE`, `CARRYING`), target coordinates $(x_t/W, y_t/H)$, and normalized distance to goal.
-- **Local Obstacle Raycasts (4 dims)**: Immediate impassable cell indicators in 4 cardinal directions $[N, S, E, W] \in \{0, 1\}$.
-- **Neighbor Robot Offsets (12 dims)**: Relative positions $(\Delta x / W, \Delta y / H)$, carrying status, and proximity alerts for the 3 closest neighboring robots.
-- **Target Direction Vector (2 dims)**: Unit heading $(\cos \theta, \sin \theta)$ toward active target.
-- **Nearest Packing Station (2 dims)**: Relative offset to closest delivery workstation.
-- **Congestion Gauge (2 dims)**: Number of robots within 2-cell radius and consecutive wait step counter.
+## 2. Setup
 
-### Action Space ($\mathcal{A}_i \in \{0, 1, 2, 3, 4, 5\}$)
-- `0`: Move North ($y - 1$)
-- `1`: Move South ($y + 1$)
-- `2`: Move East ($x + 1$)
-- `3`: Move West ($x - 1$)
-- `4`: Wait / Yield (Stand still)
-- `5`: Interact (Load item at shelf access cell / Unload item at packing station)
+Tested with **Python 3.12.2** on Windows 11, CPU only (torch 2.8.0+cpu). Python 3.13 should work but was not
+available on the test machine.
 
-### Reward Function
-$$\mathcal{R}_i(t) = R_{\text{delivery}} + R_{\text{pickup}} + R_{\text{progress}} + R_{\text{collision}} + R_{\text{time}} + R_{\text{wait\_idle}}$$
-- $R_{\text{delivery}} = +10.0$: Successfully delivering an order pod to a packing workstation.
-- $R_{\text{pickup}} = +3.0$: Successfully loading item from target shelf pod.
-- $R_{\text{progress}} = 0.2 \times (d_t - d_{t+1})$: Potential-based reward shaping for progress toward target.
-- $R_{\text{collision}} = -5.0$: Penalty for robot-robot or obstacle collisions.
-- $R_{\text{time}} = -0.02$: Step cost to encourage shortest-time routing.
-- $R_{\text{wait\_idle}} = -0.05$: Penalty for stalling when an active target is assigned.
-
----
-
-## 3. Quickstart & Installation
-
-### Setup Environment
 ```bash
-# Clone the repository
-cd warehouse-rl
-
-# Activate existing virtual environment or create a new one
-python -m venv venv
-.\venv\Scripts\activate  # On Windows
-
-# Install dependencies
 pip install -r requirements.txt
+python -m pytest -q tests/
 ```
 
-### Run Unit Tests
-```bash
-python -m pytest tests/
-```
+New dependencies added in this revision: `openpyxl` (read the Online Retail II spreadsheet once) and `scipy`
+(t-distribution confidence intervals). Windows note: the project path on the development machine was ~200
+characters long, close to Windows' 260-character limit; keep the repository in a short path (e.g. `C:\marl`).
 
----
+## 3. Data (realism only - RL experience comes from the simulator)
 
-## 4. How to Train RL & MARL Agents
+See `data/README.md`. Raw files are never committed; preprocessing writes only small JSON/CSV files.
 
-### Train Independent PPO (IPPO)
-```bash
-python training/train_ippo.py --timesteps 20000 --seed 42
-```
+| Dataset | Used for |
+|---|---|
+| Online Retail II (UCI id 502, D. Chen, CC BY 4.0) | `empirical` order mode: SKU popularity (top-1000 SKUs = 68.9% of 1,003,214 clean order lines), invoices per hour, lines per invoice (mean 25.1) |
+| MAPF benchmark `warehouse-*` maps (Stern et al., SoCS 2019) | 4 held-out test layouts (30x20 and 46x33 crops, shelves/stations placed by a fixed rule) |
 
-### Train Multi-Agent PPO (MAPPO) with Centralized Critic
-```bash
-python training/train_mappo.py --timesteps 20000 --seed 42
-```
+## 4. Environment
 
-TensorBoard logs are saved to `results/logs/`. To monitor training live:
-```bash
-tensorboard --logdir results/logs/
-```
+* 10x10 own layouts `kiva_standard` (2 stations) and `narrow_corridor` (1 station, one-cell gap).
+* Observation: 28 numbers per robot (own state, target, wall flags, 3 nearest robots, congestion).
+* Actions: N, S, E, W, Wait, Interact. **Action masking** removes moves into shelves/walls/outside the grid and
+  Interact when it cannot pick anything up (other robots are not masked; avoiding them is learned).
+* A "collision" is a **blocked move**: the simulator never lets two robots share a cell or swap, it keeps the
+  robot in place and counts the event (robot-robot and wall bumps are counted separately).
+* Rewards (per robot, `environment.rewards` in the YAML): -0.02 per step, -5 per blocked move, +0.2 x progress
+  (Manhattan), -0.05 for waiting with a task, +3 pickup, +10 delivery.
 
----
-
-## 5. Running the Comparative Benchmark
-
-Run all three methods across identical evaluation seeds:
-```bash
-python evaluation/evaluate.py --episodes 10 --order_lambda 0.25
-```
-
-This generates `results/evaluation_results.csv`.
-
-To generate publication-grade comparison plots:
-```bash
-python visualization/plotter.py --csv results/evaluation_results.csv
-```
-
-![Comparative Dashboard](results/plots/comparative_dashboard.png)
-
----
-
-## 6. Live Interactive Simulation
-
-Launch the Pygame warehouse visualizer in real-time:
+## 5. How to reproduce everything
 
 ```bash
-# Run Heuristic Space-Time A* Baseline
-python demo.py --method baseline --fps 15
-
-# Run Trained IPPO Fleet
-python demo.py --method ippo --fps 15
-
-# Run Trained MAPPO Fleet
-python demo.py --method mappo --fps 15
+# Phase 0: audit of the original code (reproduces the committed numbers, measures speed)
+python evaluation/phase0_audit.py
+# Phase 3: data (needs the raw files, see data/README.md)
+python data/check_datasets.py
+python data/preprocess_online_retail.py
+python data/mapf_layouts.py --show
+# Single training runs
+python training/train_ippo.py --seed 1
+python training/train_mappo.py --seed 1
+python training/train_hier.py --seed 1
+# Phase 5: all methods + ablations x 3 seeds (resumable; ~4-5 h on a 2-core i3)
+python training/run_queue.py
+# Phase 5 evaluation (see results/report/FINAL_REPORT.md for the exact list of commands used)
+python evaluation/scenario_matrix.py --matrix own --split dev --runs results/runs/p5/* --output results/eval/p5_own_dev.csv
+python evaluation/stats.py --input results/eval/p5_own_dev.csv --output results/eval/p5_own_dev_summary.csv
 ```
 
-![Simulation Screenshot](results/plots/simulation_frame.png)
+Any setting can be overridden from the command line, e.g. `--set training.action_masking=false`.
 
----
+## 6. Evaluation protocol
 
-## 7. Research Questions & Theoretical Insights
+| Split | Layouts | Orders | Seeds | Used for |
+|---|---|---|---|---|
+| Train | kiva_standard, narrow_corridor | synthetic, lambda ~ U(0.1, 0.3) | env seeds >= 10000 | learning |
+| Dev | same, low/medium/high load | synthetic | 5001-5010 | curves, checkpoint selection, ablations, all design decisions |
+| Test | 4 MAPF-derived layouts x {5, 10} robots | empirical (Online Retail II) | 101-120 | final comparison only, run once |
 
-1. **Why is this an RL problem?**
-   Classical exact planning methods (such as Conflict-Based Search - CBS) suffer exponential worst-case computational complexity $\mathcal{O}(2^N)$ in dynamic environments where orders arrive stochastically. RL pre-computes coordination heuristics during offline training, providing sub-millisecond execution time during live deployment.
+Confidence intervals: RL variants use the training seed as the unit (3 seeds, Student-t, so intervals are wide);
+the baseline uses evaluation episodes. Differences to the baseline are paired on the same evaluation seed.
+Test order rates follow a geometry rule fixed before testing (`evaluation/scenario_matrix.py`).
 
-2. **Why is Multi-Agent RL (MAPPO) superior to Independent RL (IPPO)?**
-   In IPPO, each robot views other learning agents as moving parts of the environment. This causes severe non-stationarity, violating the Markov property. MAPPO solves this through Centralized Training with Decentralized Execution (CTDE): the centralized critic observes global warehouse traffic and queue backlog, stabilizing value estimates and resolving the multi-agent credit assignment problem.
+## 7. Results and figures
 
-3. **Why isn't single-agent shortest path (Standard A*) sufficient?**
-   Standard single-agent $A^*$ ignores time and other agents, causing head-on deadlocks and severe gridlock at intersections. Space-Time $A^*$ with a reservation table improves safety but can still suffer starvation or deadlock when multiple agents converge on the same workstation.
+* Report with every table, the audit, design decisions and limitations: `results/report/FINAL_REPORT.md`
+* Slide text: `results/report/SLIDES.md`
+* Figures: `results/plots/p1_curves.png` (Phase 1 learning curves), `p2_curriculum_diag.png` (curriculum
+  collapse), `p5_curves_main.png`, `p5_curves_ablation_ippo.png`, `p5_own_dev_main.png`, `p5_ablations.png`,
+  `p5_test.png`
+* Tables: `results/eval/p5_own_dev_summary.md` (dev + ablations), `results/eval/p5_test_summary.md` (test)
 
-4. **Limitations & Future Work**:
-   - Discrete grid assumptions: Future extensions can integrate continuous kinematics and acceleration curves.
-   - Battery charging dynamics: Adding charging stations and energy depletion thresholds.
-   - Fleet scaling: Hierarchical MARL for fleets of $50+$ robots.
+Ablations on dev (3 seeds, all 6 scenarios): IPPO 32.6 ± 4.5; without action masking 17.2 ± 13.0; without
+observation/reward normalisation 4.7 ± 3.2; with the 2->3->5-robot curriculum 25.7 ± 9.0; MAPPO with the
+original single fleet-value critic 7.0 ± 4.5 vs 28.2 ± 7.0 with the per-robot critic.
+
+## 8. Limitations
+
+Grid world with unit moves; a "collision" is a blocked move; 3 training seeds (wide CIs); 500k-step budget
+(IPPO/MAPPO curves were still rising); no per-method hyperparameter search; one item per order; empirical
+statistics from one retailer; 4 test maps from one benchmark family; tested on Python 3.12.

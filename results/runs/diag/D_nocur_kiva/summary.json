@@ -1,0 +1,11 @@
+{
+  "method": "ippo",
+  "seed": 1,
+  "env_steps": 250880,
+  "wall_time_s": 383.28889179229736,
+  "env_steps_per_s": 654.545449587281,
+  "final_dev_throughput": 30.1,
+  "best_dev_throughput": 31.3,
+  "curriculum": false,
+  "run_dir": "results/runs/diag\\D_nocur_kiva"
+}

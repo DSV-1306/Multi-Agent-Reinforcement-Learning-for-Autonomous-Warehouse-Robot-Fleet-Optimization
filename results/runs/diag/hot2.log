@@ -1,0 +1,7 @@
+--> [HIER] seed=9 budget=100,000 env steps -> results/runs/diag\hot2
+  step         0 | decisions       0 | dev thru  42.8 coll   7.0 lat  98.1 | train thru   nan | 0 env-steps/s
+  step    25,200 | decisions   2,893 | dev thru  43.6 coll   7.9 lat  77.4 | train thru  41.0 | 194 env-steps/s
+  step    50,000 | decisions   5,802 | dev thru  43.8 coll   6.0 lat  71.0 | train thru  42.0 | 192 env-steps/s
+  step    75,200 | decisions   8,671 | dev thru  42.3 coll  11.9 lat  70.7 | train thru  40.6 | 199 env-steps/s
+  step   100,000 | decisions  11,540 | dev thru  43.3 coll  10.6 lat  70.8 | train thru  41.3 | 187 env-steps/s
+--> [HIER] done in 8.9 min | best dev thru 43.8

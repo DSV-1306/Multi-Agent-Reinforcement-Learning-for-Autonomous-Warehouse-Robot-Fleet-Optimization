@@ -1,0 +1,7 @@
+--> [HIER] seed=9 budget=100,000 env steps -> results/runs/diag\hfl2
+  step         0 | decisions       0 | dev thru  40.3 coll  20.5 lat  99.5 | train thru   nan | 0 env-steps/s
+  step    25,200 | decisions   4,578 | dev thru  40.0 coll  15.3 lat  96.0 | train thru  39.3 | 194 env-steps/s
+  step    50,000 | decisions   9,144 | dev thru  41.8 coll  13.0 lat 100.8 | train thru  39.7 | 190 env-steps/s
+  step    75,200 | decisions  14,057 | dev thru  41.2 coll  16.1 lat  92.2 | train thru  40.0 | 198 env-steps/s
+  step   100,000 | decisions  19,172 | dev thru  42.2 coll  20.9 lat  94.8 | train thru  37.9 | 186 env-steps/s
+--> [HIER] done in 9.0 min | best dev thru 42.2

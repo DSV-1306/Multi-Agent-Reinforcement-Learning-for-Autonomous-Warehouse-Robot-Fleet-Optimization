@@ -6,6 +6,11 @@ from typing import Dict, List, Tuple, Optional
 from baselines.astar import ReservationTable, space_time_astar
 from environment.warehouse_env import WarehouseEnv
 
+# Space-time search horizon: the original 80 steps, or twice the grid's width + height on larger
+# (held-out) layouts so long paths are not cut off. Unchanged on the 10x10 training layouts.
+BASE_TIME_HORIZON = 80
+HORIZON_PER_GRID_SPAN = 2
+
 
 class HeuristicFleetController:
     """
@@ -17,6 +22,8 @@ class HeuristicFleetController:
 
     def __init__(self, env: WarehouseEnv):
         self.env = env
+        self.max_time_horizon = max(BASE_TIME_HORIZON,
+                                    HORIZON_PER_GRID_SPAN * (env.grid.width + env.grid.height))
         self.reservation_table = ReservationTable()
         self.planned_paths: Dict[int, List[Tuple[int, int]]] = {
             i: [] for i in range(env.num_robots)
@@ -69,7 +76,7 @@ class HeuristicFleetController:
                         reservation_table=self.reservation_table,
                         robot_id=i,
                         other_robot_positions=other_positions,
-                        max_time_horizon=80,
+                        max_time_horizon=self.max_time_horizon,
                     )
                     if path and len(path) > 1:
                         self.planned_paths[i] = path[1:]  # Exclude start pos

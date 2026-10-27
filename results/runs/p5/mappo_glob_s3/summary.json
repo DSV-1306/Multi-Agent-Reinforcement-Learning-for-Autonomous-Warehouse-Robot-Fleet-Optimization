@@ -1,0 +1,11 @@
+{
+  "method": "mappo",
+  "seed": 3,
+  "env_steps": 500736,
+  "wall_time_s": 28002.759848833084,
+  "env_steps_per_s": 17.881666046600987,
+  "final_dev_throughput": 7.35,
+  "best_dev_throughput": 10.05,
+  "curriculum": false,
+  "run_dir": "results/runs/p5\\mappo_glob_s3"
+}

@@ -1,0 +1,7 @@
+--> kiva_standard/low                          lambda=0.100 | baseline=34.8  ippo_cur=29.0  ippo_no_mask=24.0  ippo_no_norm=6.7  ippo=34.5  mappo_glob=10.2  mappo=34.9
+--> kiva_standard/medium                       lambda=0.200 | baseline=61.3  ippo_cur=46.2  ippo_no_mask=30.4  ippo_no_norm=9.1  ippo=60.1  mappo_glob=12.3  mappo=49.3
+--> kiva_standard/high                         lambda=0.300 | baseline=65.2  ippo_cur=45.9  ippo_no_mask=29.5  ippo_no_norm=7.9  ippo=56.9  mappo_glob=10.1  mappo=42.8
+--> narrow_corridor/low                        lambda=0.100 | baseline=23.0  ippo_cur=11.8  ippo_no_mask=5.5  ippo_no_norm=1.6  ippo=16.1  mappo_glob=1.9  mappo=13.7
+--> narrow_corridor/medium                     lambda=0.200 | baseline=26.5  ippo_cur=11.6  ippo_no_mask=7.4  ippo_no_norm=1.6  ippo=13.9  mappo_glob=1.8  mappo=14.6
+--> narrow_corridor/high                       lambda=0.300 | baseline=25.3  ippo_cur=9.5  ippo_no_mask=6.5  ippo_no_norm=1.2  ippo=13.9  mappo_glob=1.0  mappo=13.8
+--> Saved 1080 episode rows to results/eval/p5_own_dev_rl.csv

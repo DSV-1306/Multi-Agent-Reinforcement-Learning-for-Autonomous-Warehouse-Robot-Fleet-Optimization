@@ -1,0 +1,9 @@
+--> [HIER] seed=3 budget=300,000 env steps -> results/runs/p5\hier_s3
+  step         0 | decisions       0 | dev thru  42.8 coll   9.0 lat  94.3 | train thru   nan | 0 env-steps/s
+  step    50,000 | decisions   5,675 | dev thru  42.2 coll  13.1 lat  66.6 | train thru  40.5 | 214 env-steps/s
+  step   100,000 | decisions  11,563 | dev thru  43.5 coll   9.4 lat  64.6 | train thru  42.1 | 135 env-steps/s
+  step   150,000 | decisions  17,403 | dev thru  43.6 coll   6.5 lat  63.1 | train thru  41.8 | 123 env-steps/s
+  step   200,000 | decisions  23,155 | dev thru  43.0 coll  10.4 lat  63.4 | train thru  41.1 | 117 env-steps/s
+  step   250,000 | decisions  28,950 | dev thru  42.5 coll  10.7 lat  66.2 | train thru  41.4 | 115 env-steps/s
+  step   300,000 | decisions  34,671 | dev thru  43.8 coll   8.3 lat  64.5 | train thru  40.9 | 114 env-steps/s
+--> [HIER] done in 43.9 min | best dev thru 43.8

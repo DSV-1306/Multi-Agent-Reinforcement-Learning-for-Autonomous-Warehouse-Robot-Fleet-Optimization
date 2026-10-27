@@ -1,0 +1,7 @@
+--> kiva_standard/low                          lambda=0.100 | mappo_glob=9.6
+--> kiva_standard/medium                       lambda=0.200 | mappo_glob=14.4
+--> kiva_standard/high                         lambda=0.300 | mappo_glob=12.2
+--> narrow_corridor/low                        lambda=0.100 | mappo_glob=4.8
+--> narrow_corridor/medium                     lambda=0.200 | mappo_glob=5.7
+--> narrow_corridor/high                       lambda=0.300 | mappo_glob=4.5
+--> Saved 60 episode rows to results/eval/p5_own_dev_mg3.csv

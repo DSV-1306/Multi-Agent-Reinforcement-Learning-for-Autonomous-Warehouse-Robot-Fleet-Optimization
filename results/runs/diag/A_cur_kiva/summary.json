@@ -1,0 +1,11 @@
+{
+  "method": "ippo",
+  "seed": 1,
+  "env_steps": 250880,
+  "wall_time_s": 364.1611576080322,
+  "env_steps_per_s": 688.9257537731047,
+  "final_dev_throughput": 7.55,
+  "best_dev_throughput": 28.95,
+  "curriculum": true,
+  "run_dir": "results/runs/diag\\A_cur_kiva"
+}

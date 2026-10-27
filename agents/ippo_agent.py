@@ -12,6 +12,28 @@ from agents.models import Actor, DecentralizedCritic
 from training.buffer import MultiAgentRolloutBuffer
 
 
+def value_loss_fn(new_values, old_values, returns, value_clip: Optional[float]) -> torch.Tensor:
+    """0.5 * MSE, optionally with the PPO value-clipping objective (value_clip=None disables it)."""
+    v_loss_unclipped = (new_values - returns) ** 2
+    if value_clip is None:
+        return 0.5 * v_loss_unclipped.mean()
+    v_clipped = old_values + torch.clamp(new_values - old_values, -value_clip, value_clip)
+    v_loss_clipped = (v_clipped - returns) ** 2
+    return 0.5 * torch.max(v_loss_unclipped, v_loss_clipped).mean()
+
+
+def policy_loss_fn(new_logprobs, old_logprobs, advantages, clip_eps: float):
+    """Clipped surrogate loss plus diagnostics (approx. KL, fraction of clipped ratios)."""
+    log_ratio = new_logprobs - old_logprobs
+    ratio = torch.exp(log_ratio)
+    surr1 = ratio * advantages
+    surr2 = torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * advantages
+    with torch.no_grad():
+        approx_kl = ((ratio - 1.0) - log_ratio).mean()  # unbiased low-variance estimator
+        clipfrac = ((ratio - 1.0).abs() > clip_eps).float().mean()
+    return -torch.min(surr1, surr2).mean(), approx_kl, clipfrac
+
+
 class IPPOAgent:
     """
     Independent PPO (IPPO):
@@ -29,14 +51,17 @@ class IPPOAgent:
         entropy_coef: float = 0.01,
         max_grad_norm: float = 0.5,
         device: torch.device = torch.device("cpu"),
+        value_clip: Optional[float] = None,
     ):
         self.obs_dim = obs_dim
         self.action_dim = action_dim
         self.clip_eps = clip_eps
+        self.value_clip = value_clip
         self.value_coef = value_coef
         self.entropy_coef = entropy_coef
         self.max_grad_norm = max_grad_norm
         self.device = device
+        self.base_lr = lr
 
         self.actor = Actor(obs_dim=obs_dim, action_dim=action_dim).to(device)
         self.critic = DecentralizedCritic(obs_dim=obs_dim).to(device)
@@ -45,45 +70,50 @@ class IPPOAgent:
             list(self.actor.parameters()) + list(self.critic.parameters()), lr=lr, eps=1e-5
         )
 
+    def set_lr_fraction(self, frac: float):
+        """Linear learning-rate annealing: lr = base_lr * frac."""
+        for group in self.optimizer.param_groups:
+            group["lr"] = self.base_lr * frac
+
     @torch.no_grad()
     def get_actions_and_values(
-        self, obs_tensor: torch.Tensor
+        self,
+        obs_tensor: torch.Tensor,
+        action_mask: Optional[torch.Tensor] = None,
+        deterministic: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        obs_tensor shape: (num_agents, obs_dim)
-        Returns:
-            actions: (num_agents,)
-            logprobs: (num_agents,)
-            values: (num_agents,)
+        obs_tensor shape: (..., num_agents, obs_dim); action_mask: (..., num_agents, action_dim) bool
+        Returns actions, logprobs, values, each (..., num_agents)
         """
-        actions, logprobs, _ = self.actor.get_action_and_logprob(obs_tensor)
+        actions, logprobs, _ = self.actor.get_action_and_logprob(
+            obs_tensor, action_mask=action_mask, deterministic=deterministic
+        )
         values = self.critic(obs_tensor).squeeze(-1)
         return actions, logprobs, values
+
+    @torch.no_grad()
+    def get_values(self, obs_tensor: torch.Tensor, state_tensor: Optional[torch.Tensor] = None) -> torch.Tensor:
+        return self.critic(obs_tensor).squeeze(-1)
 
     def train_step(
         self, buffer: MultiAgentRolloutBuffer, num_epochs: int = 4, batch_size: int = 64
     ) -> Dict[str, float]:
         """Runs PPO gradient optimization over collected rollouts."""
-        policy_losses = []
-        value_losses = []
-        entropy_losses = []
+        logs = {k: [] for k in ("policy_loss", "value_loss", "entropy", "approx_kl", "clipfrac")}
 
         for _ in range(num_epochs):
-            for mb_obs, _, mb_actions, mb_old_logprobs, mb_advantages, mb_returns, mb_old_values in buffer.get_batches(batch_size):
-                # Actor loss
-                _, new_logprobs, entropy = self.actor.get_action_and_logprob(mb_obs, mb_actions)
-                ratio = torch.exp(new_logprobs - mb_old_logprobs)
+            for mb in buffer.get_batches(batch_size):
+                # Actor loss (the stored mask is re-applied so old and new log-probs match)
+                _, new_logprobs, entropy = self.actor.get_action_and_logprob(
+                    mb.obs, mb.actions, action_mask=mb.masks
+                )
+                policy_loss, approx_kl, clipfrac = policy_loss_fn(
+                    new_logprobs, mb.logprobs, mb.advantages, self.clip_eps
+                )
 
-                surr1 = ratio * mb_advantages
-                surr2 = torch.clamp(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * mb_advantages
-                policy_loss = -torch.min(surr1, surr2).mean()
-
-                # Critic loss (clipped value objective for stability)
-                new_values = self.critic(mb_obs).squeeze(-1)
-                v_loss_unclipped = (new_values - mb_returns) ** 2
-                v_clipped = mb_old_values + torch.clamp(new_values - mb_old_values, -self.clip_eps, self.clip_eps)
-                v_loss_clipped = (v_clipped - mb_returns) ** 2
-                value_loss = 0.5 * torch.max(v_loss_unclipped, v_loss_clipped).mean()
+                new_values = self.critic(mb.obs).squeeze(-1)
+                value_loss = value_loss_fn(new_values, mb.values, mb.returns, self.value_clip)
 
                 entropy_loss = entropy.mean()
 
@@ -97,26 +127,25 @@ class IPPOAgent:
                 )
                 self.optimizer.step()
 
-                policy_losses.append(policy_loss.item())
-                value_losses.append(value_loss.item())
-                entropy_losses.append(entropy_loss.item())
+                for k, v in zip(logs, (policy_loss, value_loss, entropy_loss, approx_kl, clipfrac)):
+                    logs[k].append(v.item())
 
-        return {
-            "policy_loss": float(torch.tensor(policy_losses).mean()),
-            "value_loss": float(torch.tensor(value_losses).mean()),
-            "entropy": float(torch.tensor(entropy_losses).mean()),
-        }
+        return {k: float(torch.tensor(v).mean()) for k, v in logs.items()}
 
-    def save(self, filepath: str):
+    def save(self, filepath: str, extra: Optional[Dict[str, Any]] = None):
+        """extra: run metadata (normalizer statistics, masking flag, ...) needed to evaluate the policy."""
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         torch.save({
             "actor": self.actor.state_dict(),
             "critic": self.critic.state_dict(),
             "optimizer": self.optimizer.state_dict(),
+            "extra": extra or {},
         }, filepath)
 
-    def load(self, filepath: str):
-        checkpoint = torch.load(filepath, map_location=self.device)
+    def load(self, filepath: str, load_optimizer: bool = True) -> Dict[str, Any]:
+        checkpoint = torch.load(filepath, map_location=self.device, weights_only=False)
         self.actor.load_state_dict(checkpoint["actor"])
         self.critic.load_state_dict(checkpoint["critic"])
-        self.optimizer.load_state_dict(checkpoint["optimizer"])
+        if load_optimizer:
+            self.optimizer.load_state_dict(checkpoint["optimizer"])
+        return checkpoint.get("extra", {})

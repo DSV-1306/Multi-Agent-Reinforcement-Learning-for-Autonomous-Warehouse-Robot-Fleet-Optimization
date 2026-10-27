@@ -1,0 +1,11 @@
+{
+  "method": "ippo",
+  "seed": 3,
+  "env_steps": 500736,
+  "wall_time_s": 672.8275444507599,
+  "env_steps_per_s": 744.2263684504162,
+  "final_dev_throughput": 35.65,
+  "best_dev_throughput": 35.65,
+  "curriculum": false,
+  "run_dir": "results/runs/p5\\ippo_s3"
+}

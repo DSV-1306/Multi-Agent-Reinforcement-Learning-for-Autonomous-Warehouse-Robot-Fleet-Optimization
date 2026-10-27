@@ -1,0 +1,8 @@
+--> [IPPO] seed=1 envs=16 rollout=64 updates=245 budget=250,880 env steps, 3 stage(s) -> results/runs/diag\A_cur_kiva
+  step         0 st0 | dev thru   1.6 coll  72.5 (wall 0.0) | train thru   nan | 0 env-steps/s
+  step    50,176 st2 | dev thru  28.9 coll 310.6 (wall 0.0) | train thru  24.9 | 797 env-steps/s
+  step   100,352 st2 | dev thru  10.4 coll  38.9 (wall 0.0) | train thru  33.4 | 717 env-steps/s
+  step   150,528 st2 | dev thru  13.1 coll  54.4 (wall 0.0) | train thru  13.5 | 703 env-steps/s
+  step   200,704 st2 | dev thru   8.3 coll  36.5 (wall 0.0) | train thru  17.8 | 694 env-steps/s
+  step   250,880 st2 | dev thru   7.5 coll  34.5 (wall 0.0) | train thru  13.2 | 689 env-steps/s
+--> [IPPO] done in 6.1 min | final dev thru 7.5 | best dev thru 28.9

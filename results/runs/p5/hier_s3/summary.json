@@ -1,0 +1,11 @@
+{
+  "method": "hier",
+  "seed": 3,
+  "env_steps": 300000,
+  "decisions": 34671,
+  "wall_time_s": 2635.9463963508606,
+  "env_steps_per_s": 113.81111558843254,
+  "final_dev_throughput": 43.75,
+  "best_dev_throughput": 43.75,
+  "run_dir": "results/runs/p5\\hier_s3"
+}

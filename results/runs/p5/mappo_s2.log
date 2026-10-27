@@ -1,0 +1,13 @@
+--> [MAPPO] seed=2 envs=16 rollout=64 updates=489 budget=500,736 env steps, 1 stage(s) -> results/runs/p5\mappo_s2
+  step         0 st0 | dev thru   1.4 coll  78.0 (wall 0.0) | train thru   nan | 0 env-steps/s
+  step    50,176 st0 | dev thru  13.4 coll  41.4 (wall 0.0) | train thru  15.7 | 540 env-steps/s
+  step   100,352 st0 | dev thru  11.3 coll  14.1 (wall 0.0) | train thru   9.5 | 545 env-steps/s
+  step   150,528 st0 | dev thru   8.8 coll  17.2 (wall 0.0) | train thru  10.0 | 390 env-steps/s
+  step   200,704 st0 | dev thru  12.5 coll  22.1 (wall 0.0) | train thru   8.9 | 354 env-steps/s
+  step   250,880 st0 | dev thru  12.6 coll  17.9 (wall 0.0) | train thru  11.9 | 343 env-steps/s
+  step   300,032 st0 | dev thru  16.5 coll  20.3 (wall 0.0) | train thru  15.4 | 335 env-steps/s
+  step   350,208 st0 | dev thru  20.1 coll  20.7 (wall 0.0) | train thru  21.2 | 328 env-steps/s
+  step   400,384 st0 | dev thru  27.6 coll  21.0 (wall 0.0) | train thru  21.4 | 341 env-steps/s
+  step   450,560 st0 | dev thru  25.6 coll  19.1 (wall 0.0) | train thru  24.4 | 357 env-steps/s
+  step   500,736 st0 | dev thru  28.1 coll  14.7 (wall 0.0) | train thru  27.3 | 371 env-steps/s
+--> [MAPPO] done in 22.5 min | final dev thru 28.1 | best dev thru 28.1

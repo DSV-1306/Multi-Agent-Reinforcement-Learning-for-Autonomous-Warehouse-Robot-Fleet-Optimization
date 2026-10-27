@@ -1,0 +1,11 @@
+{
+  "method": "ippo",
+  "seed": 1,
+  "env_steps": 250880,
+  "wall_time_s": 382.6207196712494,
+  "env_steps_per_s": 655.6884849716398,
+  "final_dev_throughput": 24.9,
+  "best_dev_throughput": 24.9,
+  "curriculum": false,
+  "run_dir": "results/runs/diag\\B_nocur_both"
+}

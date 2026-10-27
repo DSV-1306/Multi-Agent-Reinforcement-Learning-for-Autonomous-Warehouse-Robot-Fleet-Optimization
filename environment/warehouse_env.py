@@ -12,6 +12,26 @@ from environment.grid import WarehouseGrid
 from environment.robot import WarehouseRobot, RobotStatus
 from environment.order import OrderGenerator, Order
 
+# Reward terms per robot per step. Values equal the original hardcoded ones; configs override them.
+DEFAULT_REWARDS: Dict[str, Any] = {
+    "time": -0.02,             # every step
+    "collision_wall": -5.0,    # move blocked by shelf / wall / boundary
+    "collision_robot": -5.0,   # move blocked by a vertex or swap conflict with another robot
+    "progress": 0.2,           # x (previous Manhattan distance - current) to the active target
+    "idle": -0.05,             # waiting while a target is assigned
+    "pickup": 3.0,
+    "delivery": 10.0,
+    # Phase 0 finding F1: action 5 without effect used to be a penalty-free wait.
+    # True charges it the idle penalty; False restores the original behaviour.
+    "penalize_noop_interact": True,
+}
+
+ACTION_WAIT = 4
+ACTION_INTERACT = 5
+NUM_ACTIONS = 6
+# Movement direction mappings: 0=N, 1=S, 2=E, 3=W, 4=Wait, 5=Interact
+ACTION_DELTAS = {0: (0, -1), 1: (0, 1), 2: (1, 0), 3: (-1, 0), 4: (0, 0), 5: (0, 0)}
+
 
 class WarehouseEnv(ParallelEnv):
     """
@@ -31,9 +51,37 @@ class WarehouseEnv(ParallelEnv):
         max_steps: int = 400,
         render_mode: Optional[str] = None,
         seed: Optional[int] = None,
+        rewards: Optional[Dict[str, Any]] = None,
+        mask_useless_interact: bool = True,
+        layout_spec: Optional[Dict[str, Any]] = None,
+        state_max_robots: Optional[int] = None,
+        dispatch_mode: str = "auto",
+        order_config: Optional[Dict[str, Any]] = None,
     ):
+        """
+        layout_spec: explicit layout (see WarehouseGrid); overrides layout_type/grid_width/grid_height.
+        state_max_robots: pad the MAPPO global state to this many robots so the state size stays fixed
+            when the robot count changes (curriculum, held-out tests). Default: num_robots (original size).
+        dispatch_mode: "auto" = env gives each idle robot its nearest pending order (original);
+            "external" = orders wait until assign_order() is called (hierarchical RL allocator).
+        order_config: extra OrderGenerator options, e.g. {"mode": "empirical", "empirical": {...}}.
+        """
         super().__init__()
+        if dispatch_mode not in ("auto", "external"):
+            raise ValueError(f"dispatch_mode must be 'auto' or 'external', got {dispatch_mode!r}")
+        self.dispatch_mode = dispatch_mode
+        # External allocator: callable(env) that calls env.assign_order(); set as an attribute so env
+        # kwargs stay plain data.
+        self.dispatcher = None
+        self.reward_cfg = {**DEFAULT_REWARDS, **(rewards or {})}
+        unknown = set(self.reward_cfg) - set(DEFAULT_REWARDS)
+        if unknown:
+            raise ValueError(f"Unknown reward keys: {sorted(unknown)}")
+        self.mask_useless_interact = mask_useless_interact
         self.num_robots = num_robots
+        if layout_spec:
+            grid_width, grid_height = layout_spec["width"], layout_spec["height"]
+            layout_type = layout_spec.get("name", "custom")
         self.grid_width = grid_width
         self.grid_height = grid_height
         self.layout_type = layout_type
@@ -42,7 +90,7 @@ class WarehouseEnv(ParallelEnv):
         self.render_mode = render_mode
 
         # Core grid
-        self.grid = WarehouseGrid(width=grid_width, height=grid_height, layout_type=layout_type)
+        self.grid = WarehouseGrid(width=grid_width, height=grid_height, layout_type=layout_type, spec=layout_spec)
         
         # Agents setup
         self.possible_agents = [f"robot_{i}" for i in range(num_robots)]
@@ -58,12 +106,15 @@ class WarehouseEnv(ParallelEnv):
 
         # Action space: 6 discrete actions
         # 0: North, 1: South, 2: East, 3: West, 4: Wait, 5: Interact (Pickup/Dropoff)
-        self._action_space = spaces.Discrete(6)
+        self._action_space = spaces.Discrete(NUM_ACTIONS)
         self.action_spaces = {agent: self._action_space for agent in self.possible_agents}
 
         # Global state dimension for centralized critic (MAPPO)
-        # num_robots * obs_dim + 10 global features
-        self.state_dim = self.num_robots * self.obs_dim + 10
+        # state_max_robots * obs_dim + 10 global features (robots beyond num_robots are zero padding)
+        self.state_max_robots = state_max_robots or num_robots
+        if self.state_max_robots < num_robots:
+            raise ValueError("state_max_robots must be >= num_robots")
+        self.state_dim = self.state_max_robots * self.obs_dim + 10
 
         # Robot instances
         self.robots: List[WarehouseRobot] = []
@@ -81,10 +132,14 @@ class WarehouseEnv(ParallelEnv):
             grid_access_fn=self.grid.get_shelf_access_cells,
             lambda_rate=order_lambda,
             seed=seed,
+            max_steps=max_steps,
+            **(order_config or {}),
         )
 
         self.current_step = 0
         self.total_fleet_collisions = 0
+        self.total_wall_bumps = 0
+        self.total_robot_collisions = 0
         self.total_orders_completed = 0
         self._rng = np.random.default_rng(seed)
 
@@ -106,6 +161,8 @@ class WarehouseEnv(ParallelEnv):
         self.agents = list(self.possible_agents)
         self.current_step = 0
         self.total_fleet_collisions = 0
+        self.total_wall_bumps = 0
+        self.total_robot_collisions = 0
         self.total_orders_completed = 0
 
         # Reset robots to free walkable cells
@@ -123,12 +180,96 @@ class WarehouseEnv(ParallelEnv):
         self._auto_dispatch_orders()
 
         observations = {agent: self._get_obs(agent) for agent in self.agents}
-        infos = {agent: {} for agent in self.agents}
+        infos = {agent: {"action_mask": self.action_mask(agent)} for agent in self.agents}
 
         return observations, infos
 
+    def action_mask(self, agent: str) -> np.ndarray:
+        """
+        Boolean mask over the 6 actions (True = allowed).
+        Moves into static obstacles (shelves, walls, outside the grid) are masked; other robots are
+        NOT masked, so avoiding them remains the policy's job. Wait is always allowed. Interact is
+        allowed only when it can pick up from an adjacent access cell (if mask_useless_interact).
+        """
+        robot = self.robots[self.agent_name_to_idx[agent]]
+        mask = np.ones(NUM_ACTIONS, dtype=bool)
+        for act in range(ACTION_WAIT):
+            dx, dy = ACTION_DELTAS[act]
+            mask[act] = self.grid.is_walkable(robot.x + dx, robot.y + dy)
+        if self.mask_useless_interact:
+            mask[ACTION_INTERACT] = self._interact_can_pick_up(robot)
+        return mask
+
+    def action_masks(self) -> np.ndarray:
+        """Masks for all robots, shape (num_robots, 6)."""
+        return np.stack([self.action_mask(a) for a in self.possible_agents])
+
+    def _interact_can_pick_up(self, robot: WarehouseRobot) -> bool:
+        return (
+            robot.status == RobotStatus.EN_ROUTE_TO_SHELF
+            and robot.target_pos is not None
+            and robot.pos != robot.target_pos
+            and self.grid.manhattan_distance(robot.pos, robot.target_pos) <= 1
+        )
+
+    def _resolve_moves(self, actions: Dict[str, int]):
+        """
+        Returns (final positions, wall-bump flags, robot-conflict flags).
+        Blocked robots stay in place. Vertex and swap checks are repeated until no robot changes,
+        because reverting one robot can create a new conflict (Phase 0 finding F3).
+        """
+        current = {i: self.robots[i].pos for i in range(self.num_robots)}
+        proposed: Dict[int, Tuple[int, int]] = {}
+        wall_bump = {i: False for i in range(self.num_robots)}
+        robot_conflict = {i: False for i in range(self.num_robots)}
+
+        for agent in self.agents:
+            idx = self.agent_name_to_idx[agent]
+            dx, dy = ACTION_DELTAS.get(actions.get(agent, ACTION_WAIT), (0, 0))
+            target = (current[idx][0] + dx, current[idx][1] + dy)
+            if not self.grid.is_walkable(*target):
+                wall_bump[idx] = True
+                target = current[idx]
+            proposed[idx] = target
+        for idx in range(self.num_robots):
+            proposed.setdefault(idx, current[idx])
+
+        changed = True
+        while changed:
+            changed = False
+            # Vertex conflicts: several robots end in one cell -> every mover in it is blocked
+            occupants: Dict[Tuple[int, int], List[int]] = {}
+            for idx, pos in proposed.items():
+                occupants.setdefault(pos, []).append(idx)
+            for group in occupants.values():
+                if len(group) > 1:
+                    for idx in group:
+                        if proposed[idx] != current[idx]:
+                            robot_conflict[idx] = True
+                            proposed[idx] = current[idx]
+                            changed = True
+            # Swap (edge) conflicts: two robots exchange cells
+            for i in range(self.num_robots):
+                for j in range(i + 1, self.num_robots):
+                    if (
+                        proposed[i] == current[j]
+                        and proposed[j] == current[i]
+                        and proposed[i] != current[i]
+                    ):
+                        robot_conflict[i] = robot_conflict[j] = True
+                        proposed[i], proposed[j] = current[i], current[j]
+                        changed = True
+
+        return proposed, wall_bump, robot_conflict
+
     def _auto_dispatch_orders(self):
         """Assigns oldest pending orders to nearest available idle robots."""
+        if self.dispatch_mode == "external":
+            # The allocator is called at exactly the moments the built-in nearest-order rule would run
+            # (reset, start of each step, after each delivery), so the two are directly comparable.
+            if self.dispatcher is not None:
+                self.dispatcher(self)
+            return
         idle_robots = [r for r in self.robots if r.is_idle]
         if not idle_robots or not self.order_generator.pending_orders:
             return
@@ -151,6 +292,16 @@ class WarehouseEnv(ParallelEnv):
                 self.order_generator.active_orders[order.id] = order
                 robot.assign_order(order.id, order.shelf_access_pos)
 
+    def assign_order(self, robot_idx: int, pending_idx: int) -> None:
+        """External dispatch: give pending order `pending_idx` to idle robot `robot_idx`."""
+        robot = self.robots[robot_idx]
+        if not robot.is_idle:
+            raise ValueError(f"robot {robot_idx} is not idle")
+        order = self.order_generator.pending_orders.pop(pending_idx)
+        order.assigned_robot_id = robot.id
+        self.order_generator.active_orders[order.id] = order
+        robot.assign_order(order.id, order.shelf_access_pos)
+
     def step(
         self, actions: Dict[str, int]
     ) -> Tuple[
@@ -166,117 +317,83 @@ class WarehouseEnv(ParallelEnv):
         self.order_generator.generate_orders_for_step(self.current_step)
         self._auto_dispatch_orders()
 
-        # 2. Movement direction mappings: 0=N, 1=S, 2=E, 3=W, 4=Wait, 5=Interact
-        deltas = {0: (0, -1), 1: (0, 1), 2: (1, 0), 3: (-1, 0), 4: (0, 0), 5: (0, 0)}
+        # 2. Movement and collision resolution
+        action_intent = {
+            self.agent_name_to_idx[agent]: actions.get(agent, ACTION_WAIT) for agent in self.agents
+        }
+        final_pos, wall_bump, robot_conflict = self._resolve_moves(actions)
+        collision_detected = {i: wall_bump[i] or robot_conflict[i] for i in range(self.num_robots)}
 
-        # Proposed positions
-        proposed_pos: Dict[int, Tuple[int, int]] = {}
-        action_intent: Dict[int, int] = {}
-        for agent in self.agents:
-            idx = self.agent_name_to_idx[agent]
-            act = actions.get(agent, 4)
-            action_intent[idx] = act
-            dx, dy = deltas.get(act, (0, 0))
-            rx, ry = self.robots[idx].pos
-            proposed_pos[idx] = (rx + dx, ry + dy)
-
-        # 3. Collision Resolution
-        actual_pos: Dict[int, Tuple[int, int]] = {}
-        collision_detected: Dict[int, bool] = {i: False for i in range(self.num_robots)}
-
-        # Check obstacle / wall collisions
         for idx in range(self.num_robots):
-            tx, ty = proposed_pos[idx]
-            if not self.grid.is_walkable(tx, ty):
-                collision_detected[idx] = True
-                proposed_pos[idx] = self.robots[idx].pos
-
-        # Check vertex collisions (multiple robots attempting same cell)
-        target_counts: Dict[Tuple[int, int], List[int]] = {}
-        for idx, tpos in proposed_pos.items():
-            target_counts.setdefault(tpos, []).append(idx)
-
-        for tpos, occupants in target_counts.items():
-            if len(occupants) > 1:
-                # Collision: all occupants fail move and stay at current positions
-                for idx in occupants:
-                    if proposed_pos[idx] != self.robots[idx].pos:
-                        collision_detected[idx] = True
-                        proposed_pos[idx] = self.robots[idx].pos
-
-        # Check edge / swap collisions (robot A moves to B's pos while B moves to A's pos)
-        for i in range(self.num_robots):
-            for j in range(i + 1, self.num_robots):
-                if (
-                    proposed_pos[i] == self.robots[j].pos
-                    and proposed_pos[j] == self.robots[i].pos
-                    and proposed_pos[i] != self.robots[i].pos
-                ):
-                    collision_detected[i] = True
-                    collision_detected[j] = True
-                    proposed_pos[i] = self.robots[i].pos
-                    proposed_pos[j] = self.robots[j].pos
-
-        # Commit final positions
-        for idx in range(self.num_robots):
-            new_pos = proposed_pos[idx]
+            new_pos = final_pos[idx]
+            if wall_bump[idx]:
+                self.robots[idx].log_collision("wall")
+                self.total_wall_bumps += 1
+            elif robot_conflict[idx]:
+                self.robots[idx].log_collision("robot")
+                self.total_robot_collisions += 1
             if collision_detected[idx]:
-                self.robots[idx].log_collision()
                 self.total_fleet_collisions += 1
             if new_pos != self.robots[idx].pos:
                 self.robots[idx].move_to(new_pos[0], new_pos[1])
             else:
                 self.robots[idx].wait()
 
-        # 4. Check Task Interactions & Rewards
+        # 3. Task interactions & rewards
+        rc = self.reward_cfg
         rewards: Dict[str, float] = {agent: 0.0 for agent in self.agents}
 
         for agent in self.agents:
             idx = self.agent_name_to_idx[agent]
             robot = self.robots[idx]
             act = action_intent[idx]
-            step_reward = -0.02  # Time penalty
+            step_reward = rc["time"]
 
-            # Collision penalty
-            if collision_detected[idx]:
-                step_reward += -5.0
+            if wall_bump[idx]:
+                step_reward += rc["collision_wall"]
+            elif robot_conflict[idx]:
+                step_reward += rc["collision_robot"]
 
-            # Potential-based shaping reward towards active target
-            if robot.target_pos is not None:
+            # Shaping towards the active target
+            had_target = robot.target_pos is not None
+            if had_target:
                 curr_dist = self.grid.manhattan_distance(robot.pos, robot.target_pos)
                 if robot.prev_target_dist is not None:
-                    # Positive if closer, negative if farther
-                    dist_change = robot.prev_target_dist - curr_dist
-                    step_reward += 0.2 * dist_change
+                    step_reward += rc["progress"] * (robot.prev_target_dist - curr_dist)
                 robot.prev_target_dist = curr_dist
 
-                # Idle penalty if choosing wait while having active task and no collision
-                if act == 4 and not collision_detected[idx]:
-                    step_reward += -0.05
-
-            # Interaction: Pickup item at shelf
+            interact_useful = False
+            # Pickup at shelf: automatic on the access cell, or Interact from an adjacent cell
             if robot.status == RobotStatus.EN_ROUTE_TO_SHELF and robot.target_pos is not None:
-                if robot.pos == robot.target_pos or (act == 5 and self.grid.manhattan_distance(robot.pos, robot.target_pos) <= 1):
+                interact_useful = act == ACTION_INTERACT and self._interact_can_pick_up(robot)
+                if robot.pos == robot.target_pos or interact_useful:
                     order = self.order_generator.active_orders.get(robot.current_order_id)
                     if order:
                         robot.pickup_item(station_pos=order.station_pos)
                         self.order_generator.mark_picked_up(order.id, self.current_step)
-                        step_reward += 3.0
+                        step_reward += rc["pickup"]
 
-            # Interaction: Deliver item at workstation
+            # Delivery at workstation: automatic on arrival
             elif robot.status == RobotStatus.CARRYING_TO_STATION and robot.target_pos is not None:
-                if robot.pos == robot.target_pos or (act == 5 and robot.pos == robot.target_pos):
+                if robot.pos == robot.target_pos:
                     delivered_order = self.order_generator.mark_delivered(robot.current_order_id, self.current_step)
                     if delivered_order:
                         robot.complete_delivery()
                         self.total_orders_completed += 1
-                        step_reward += 10.0
+                        step_reward += rc["delivery"]
                         # Auto-dispatch any pending order to this newly freed robot
                         self._auto_dispatch_orders()
 
+            # Idle penalty: waiting (or a no-effect Interact) while a target is assigned
+            is_wait = act == ACTION_WAIT or (
+                act == ACTION_INTERACT and rc["penalize_noop_interact"] and not interact_useful
+            )
+            if had_target and is_wait and not collision_detected[idx]:
+                step_reward += rc["idle"]
+
             rewards[agent] = step_reward
 
-        # 5. Check Termination and Truncation
+        # 4. Check Termination and Truncation
         truncated = self.current_step >= self.max_steps
         terminated = False  # Continuous fleet operation until max_steps
 
@@ -293,6 +410,9 @@ class WarehouseEnv(ParallelEnv):
                 "collisions": self.robots[self.agent_name_to_idx[agent]].collisions,
                 "fleet_throughput": self.total_orders_completed,
                 "fleet_collisions": self.total_fleet_collisions,
+                "fleet_wall_bumps": self.total_wall_bumps,
+                "fleet_robot_collisions": self.total_robot_collisions,
+                "action_mask": self.action_mask(agent),
             }
             for agent in self.possible_agents
         }
@@ -369,19 +489,23 @@ class WarehouseEnv(ParallelEnv):
 
         return obs
 
-    def state(self) -> np.ndarray:
+    def state(self, observations: Optional[Dict[str, np.ndarray]] = None) -> np.ndarray:
         """
         Global state vector for MAPPO Centralized Critic.
         Contains concatenation of all agent observations + global warehouse status.
+        observations: the dict just returned by step()/reset() for the current state, passed to avoid
+        recomputing every robot's observation (pure speed-up; results are identical).
         """
         global_state = np.zeros(self.state_dim, dtype=np.float32)
         # 1. Observations of all robots (num_robots * obs_dim)
         for i, agent in enumerate(self.possible_agents):
             start = i * self.obs_dim
-            global_state[start : start + self.obs_dim] = self._get_obs(agent)
+            global_state[start : start + self.obs_dim] = (
+                observations[agent] if observations is not None else self._get_obs(agent)
+            )
 
         # 2. Global warehouse metrics (10 dims)
-        offset = self.num_robots * self.obs_dim
+        offset = self.state_max_robots * self.obs_dim
         global_state[offset] = min(len(self.order_generator.pending_orders) / 20.0, 1.0)
         global_state[offset + 1] = len(self.order_generator.active_orders) / float(self.num_robots)
         global_state[offset + 2] = min(self.total_orders_completed / 50.0, 1.0)

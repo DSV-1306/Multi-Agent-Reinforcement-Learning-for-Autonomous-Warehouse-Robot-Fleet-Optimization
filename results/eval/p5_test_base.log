@@ -1,0 +1,9 @@
+--> mapf:warehouse-10-20-10-2-1/n5             lambda=0.064 | baseline=8.0
+--> mapf:warehouse-10-20-10-2-1/n10            lambda=0.129 | baseline=21.6
+--> mapf:warehouse-10-20-10-2-2/n5             lambda=0.067 | baseline=9.6
+--> mapf:warehouse-10-20-10-2-2/n10            lambda=0.133 | baseline=22.6
+--> mapf:warehouse-20-40-10-2-1/n5             lambda=0.042 | baseline=4.0
+--> mapf:warehouse-20-40-10-2-1/n10            lambda=0.084 | baseline=12.8
+--> mapf:warehouse-20-40-10-2-2/n5             lambda=0.042 | baseline=4.5
+--> mapf:warehouse-20-40-10-2-2/n10            lambda=0.085 | baseline=13.7
+--> Saved 160 episode rows to results/eval/p5_test_base.csv

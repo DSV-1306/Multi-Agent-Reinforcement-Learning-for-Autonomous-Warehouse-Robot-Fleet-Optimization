@@ -30,10 +30,12 @@ class WarehouseRobot:
         # Metrics tracking
         self.total_steps = 0
         self.collisions = 0
+        self.wall_bumps = 0
+        self.robot_collisions = 0
         self.deliveries_completed = 0
         self.wait_steps = 0
         self.prev_target_dist: Optional[int] = None
-        
+
         # Position trail for visualizer
         self.history: List[Tuple[int, int]] = [(self.x, self.y)]
 
@@ -59,6 +61,8 @@ class WarehouseRobot:
         self.target_pos = None
         self.total_steps = 0
         self.collisions = 0
+        self.wall_bumps = 0
+        self.robot_collisions = 0
         self.deliveries_completed = 0
         self.wait_steps = 0
         self.prev_target_dist = None
@@ -100,5 +104,10 @@ class WarehouseRobot:
         if len(self.history) > 20:
             self.history.pop(0)
 
-    def log_collision(self):
+    def log_collision(self, kind: str = "robot"):
+        """kind: "wall" (static obstacle / out of bounds) or "robot" (vertex or swap conflict)."""
         self.collisions += 1
+        if kind == "wall":
+            self.wall_bumps += 1
+        else:
+            self.robot_collisions += 1

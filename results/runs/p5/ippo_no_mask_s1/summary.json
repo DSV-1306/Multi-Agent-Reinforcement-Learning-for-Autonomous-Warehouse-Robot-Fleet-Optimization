@@ -1,0 +1,11 @@
+{
+  "method": "ippo",
+  "seed": 1,
+  "env_steps": 500736,
+  "wall_time_s": 703.7947375774384,
+  "env_steps_per_s": 711.4801706582867,
+  "final_dev_throughput": 25.8,
+  "best_dev_throughput": 26.6,
+  "curriculum": false,
+  "run_dir": "results/runs/p5\\ippo_no_mask_s1"
+}

@@ -31,3 +31,12 @@ results/logs/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Raw datasets are never committed (see data/README.md); only small derived JSON/CSV in data/processed, data/layouts
+*.xlsx
+*.map
+data/raw/
+
+# Training run checkpoints/logs (uncomment if you do not want to track .pt weights)
+# results/runs/**/*.pt
+results/runs/*.log

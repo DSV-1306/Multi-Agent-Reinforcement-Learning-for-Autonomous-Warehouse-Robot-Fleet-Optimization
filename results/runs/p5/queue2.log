@@ -1,0 +1,28 @@
+--> 13 job(s) to run with 2 worker(s)
+[   0.0 min] start ippo_cur_s1
+[   0.0 min] start mappo_glob_s1
+[  16.1 min] ok ippo_cur_s1 (16.1 min)
+[  16.2 min] start mappo_s2
+[  18.4 min] ok mappo_glob_s1 (18.4 min)
+[  18.4 min] start ippo_no_mask_s2
+[  39.0 min] ok mappo_s2 (22.9 min)
+[  39.0 min] ok ippo_no_mask_s2 (20.6 min)
+[  39.1 min] start ippo_no_norm_s2
+[  39.1 min] start ippo_cur_s2
+[  58.5 min] ok ippo_cur_s2 (19.3 min)
+[  58.6 min] start mappo_glob_s2
+[  58.9 min] ok ippo_no_norm_s2 (19.8 min)
+[  59.0 min] start ippo_s3
+[  70.5 min] ok ippo_s3 (11.5 min)
+[  70.6 min] start mappo_s3
+[  72.6 min] ok mappo_glob_s2 (14.1 min)
+[  72.7 min] start ippo_no_mask_s3
+[  99.6 min] ok ippo_no_mask_s3 (26.9 min)
+[  99.7 min] start ippo_no_norm_s3
+[ 101.9 min] ok mappo_s3 (31.4 min)
+[ 102.0 min] start ippo_cur_s3
+[ 124.7 min] ok ippo_no_norm_s3 (25.0 min)
+[ 124.8 min] start mappo_glob_s3
+[ 126.7 min] ok ippo_cur_s3 (24.7 min)
+[ 592.2 min] ok mappo_glob_s3 (467.4 min)
+--> queue finished in 592.3 min
