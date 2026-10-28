@@ -68,6 +68,23 @@ def run_demo(
 
     if method == "baseline":
         controller = HeuristicFleetController(env)
+    elif method == "hier":
+        from agents.hier_agent import AllocatorNet, RLDispatcher
+        hier_path = checkpoint or "results/runs/hier_seed1/best_dev.pt"
+        if not os.path.exists(hier_path):
+            hier_path = "results/runs/p5/hier_s1/best_dev.pt"
+        if os.path.exists(hier_path):
+            ckpt = torch.load(hier_path, map_location="cpu", weights_only=False)
+            hcfg = ckpt["hcfg"]
+            net = AllocatorNet(hidden=hcfg.get("hidden", 64))
+            net.load_state_dict(ckpt["net"])
+            dispatcher = RLDispatcher(net, hcfg, deterministic=True)
+            env.dispatch_mode = "external"
+            env.dispatcher = dispatcher
+            print(f"Loaded HIER allocator checkpoint: {hier_path}")
+        else:
+            print(f"Warning: {hier_path} not found! Using default nearest dispatch.")
+        controller = HeuristicFleetController(env)
     elif checkpoint:
         pass  # Checkpoint runner is loaded below
     elif method == "ippo":
@@ -107,7 +124,7 @@ def run_demo(
             obs_arr = np.stack([obs_dict[a] for a in env.possible_agents])
             act = runner.act(obs_arr[None], env.state(obs_dict)[None], env.action_masks()[None])[0]
             actions = {f"robot_{i}": int(act[i]) for i in range(env.num_robots)}
-        elif method == "baseline":
+        elif method in ("baseline", "hier"):
             actions = controller.get_actions()
         elif method == "ippo":
             obs_array = np.stack([obs_dict[a] for a in env.possible_agents])
@@ -147,7 +164,7 @@ def run_demo(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--method", type=str, default="baseline", choices=["baseline", "ippo", "mappo"])
+    parser.add_argument("--method", type=str, default="baseline", choices=["baseline", "ippo", "mappo", "hier"])
     parser.add_argument("--fps", type=int, default=15)
     parser.add_argument("--steps", type=int, default=300)
     parser.add_argument("--order_lambda", type=float, default=0.25)
