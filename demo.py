@@ -21,6 +21,7 @@ from evaluation.evaluate import load_policy
 
 def run_demo(
     method: str = "baseline",
+    layout: str = "kiva_standard",
     fps: int = 15,
     max_steps: int = 400,
     order_lambda: float = 0.25,
@@ -28,7 +29,7 @@ def run_demo(
     checkpoint: str = None,
 ):
     print(f"\n=======================================================")
-    print(f"   WAREHOUSE MULTI-AGENT SIMULATION: {method.upper()}")
+    print(f"   WAREHOUSE SIMULATION: {method.upper()} | LAYOUT: {layout.upper()}")
     print(f"=======================================================")
 
     state_max_robots = None
@@ -51,7 +52,7 @@ def run_demo(
         num_robots=5,
         grid_width=10,
         grid_height=10,
-        layout_type="kiva_standard",
+        layout_type=layout,
         order_lambda=order_lambda,
         max_steps=max_steps,
         state_max_robots=state_max_robots,
@@ -165,6 +166,7 @@ def run_demo(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--method", type=str, default="baseline", choices=["baseline", "ippo", "mappo", "hier"])
+    parser.add_argument("--layout", type=str, default="kiva_standard", choices=["kiva_standard", "narrow_corridor"])
     parser.add_argument("--fps", type=int, default=15)
     parser.add_argument("--steps", type=int, default=300)
     parser.add_argument("--order_lambda", type=float, default=0.25)
@@ -175,6 +177,7 @@ if __name__ == "__main__":
 
     run_demo(
         method=args.method,
+        layout=args.layout,
         fps=args.fps,
         max_steps=args.steps,
         order_lambda=args.order_lambda,
