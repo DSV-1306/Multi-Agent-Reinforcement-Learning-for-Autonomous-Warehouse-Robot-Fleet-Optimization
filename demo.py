@@ -107,7 +107,7 @@ def run_demo(
         raise ValueError(f"Unknown method: {method}")
 
     # Phase 1 checkpoints carry normalizer stats and the masking flag; load_policy applies them.
-    runner = load_policy(method, checkpoint, env.obs_dim, env.state_dim) if checkpoint and method != "baseline" else None
+    runner = load_policy(method, checkpoint, env.obs_dim, env.state_dim) if checkpoint and method in ("ippo", "mappo") else None
     if runner:
         print(f"Loaded {method.upper()} checkpoint via load_policy: {checkpoint}")
 
